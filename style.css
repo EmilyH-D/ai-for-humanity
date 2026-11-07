@@ -1,3 +1,13 @@
 ---
 layout: style
 ---
+/* Fix your header bar text color so it isn't invisible */
+.navbar a, 
+.header-bar a {
+  color: #333 !important; /* Forces header links to stay visible */
+}
+
+.navbar a:hover, 
+.header-bar a:hover {
+  color: #FFFFFF !important; /* Color when hovering */
+}
