@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASL Alphabet Recognition Agent</title>
+
+    <!-- TensorFlow.js Core Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            text-align: center;
+            padding: 25px;
+            color: #25294a;
+        }
+
+        h1 {
+            color: #343b78;
+        }
+
+        #videoContainer {
+            position: relative;
+            width: 640px;
+            max-width: 95%;
+            margin: 20px auto;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 12px;
+            transform: scaleX(-1);
+            background: #000;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+        }
+
+        button {
+            padding: 11px 18px;
+            margin: 6px;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #startButton {
+            background: #269b55;
+            color: white;
+        }
+
+        #stopButton {
+            background: #d9534f;
+            color: white;
+        }
+
+        .outputBox {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 600px;
+            margin: 15px auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+        }
+
+        #letter {
+            font-size: 65px;
+            font-weight: bold;
+            color: #269b55;
+        }
+
+        #sentence {
+            font-size: 25px;
+            min-height: 35px;
+            overflow-wrap: anywhere;
+            color: #343b78;
+        }
+
+        #status {
+            font-weight: bold;
+        }
+
+        #topPredictions {
+            line-height: 2;
+            font-size: 18px;
+            text-align: left;
+            display: inline-block;
+        }
+
+        .diagnostic {
+            background: #f0f4f8;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+
+        #messageStatus {
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>ASL Alphabet Recognition Agent</h1>
+
+<p>Show an ASL alphabet hand sign to your camera to identify it[cite: 2].</p>
+
+<button id="startButton">Start Camera</button>
+<button id="stopButton" disabled>Stop Camera</button>
+
+<p id="status">Status: Waiting to start[cite: 2]</p>
+<p id="modelStatus">AI models: Not loaded[cite: 2]</p>
+
+<div id="videoContainer">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+</div>
+
+<div class="outputBox">
+    <h2>Predicted Letters</h2>
+    <div id="letter">?</div>
+    <div class="diagnostic">
+        <h3>Top 3 Predictions</h3>
+        <div id="topPredictions">
+            Waiting for predictions...[cite: 2]
+        </div>
+    </div>
+    <p id="predictionStatus">Waiting for a hand...[cite: 2]</p>
+</div>
+
+<div class="outputBox">
+    <h2>Build Your Message</h2>
+    <p id="sentence"></p>
+    <button id="addButton" disabled>Add Letter</button>
+    <button id="spaceButton">Space</button>
+    <button id="backspaceButton">Delete Last</button>
+    <button id="clearButton">Clear</button>
+    <p id="messageStatus">
+        Show a hand sign to begin[cite: 2].
+    </p>
+</div>
+
+<script type="module">
+
+    // =====================================
+    // 1. IMPORT MEDIAPIPE VISION TASKS
+    // =====================================
+    import {
+        FilesetResolver,
+        HandLandmarker
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+
+    // =====================================
+    // 2. HTML ELEMENT BINDINGS
+    // =====================================
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const statusText = document.getElementById("status");
+    const modelStatus = document.getElementById("modelStatus");
+    const letterDisplay = document.getElementById("letter");
+    const predictionStatus = document.getElementById("predictionStatus");
+    const topPredictionsDisplay = document.getElementById("topPredictions");
+    const sentenceDisplay = document.getElementById("sentence");
+    const messageStatus = document.getElementById("messageStatus");
+
+    const startButton = document.getElementById("startButton");
+    const stopButton = document.getElementById("stopButton");
+    const addButton = document.getElementById("addButton");
+
+    // =====================================
+    // 3. APPLICATION STATE VARIABLES
+    // =====================================
+    let handLandmarker = null;
+    let classifier = null;
+    let labels = [];
+    let cameraStream = null;
+    let animationFrame = null;
+    let running = false;
+    let currentLetter = "";
+    let message = "";
+    let lastAddedLetter = "";
+    let noHandFrames = 0;
+    const NO_HAND_RESET_FRAMES = 10;
+
+    function updateStatus(text) {
+        statusText.textContent = "Status: " + text;
+    }
+
+    function updateModelStatus(text) {
+        modelStatus.textContent = "AI models: " + text;
+    }
+
+    // =====================================
+    // 4. LOAD MEDIAPIPE HAND LANDMARKER
+    // =====================================
+    async function loadHandModel() {
+        updateModelStatus("Loading hand detection...");
+        const vision = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+        );
+        handLandmarker = await HandLandmarker.createFromOptions(
+            vision,
+            {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+                },
+                runningMode: "VIDEO",
+                numHands: 1
+            }
+        );
+        console.log("Hand detector loaded.");
+    }
+
+    // =====================================
+    // 5. LOAD TENSORFLOW.JS CLASSIFIER MODEL
+    // =====================================
+    async function loadClassifier() {
+        updateModelStatus("Loading TensorFlow.js...");
+        await tf.ready();
+
+        const modelURL = "https://huggingface.co/AmimulBmeIU/asl-alphabet-classifier/resolve/main/tfjs/model.json";
+        const response = await fetch(modelURL);
+        if (!response.ok) throw new Error("Could not download model.json");
+
+        const modelJSON = await response.json();
+        const layers = modelJSON.modelTopology.model_config.config.layers;
+
+        for (const layer of layers) {
+            if (layer.class_name === "InputLayer") {
+                const config = layer.config;
+                if (config.batch_shape) {
+                    config.batchInputShape = config.batch_shape;
+                    delete config.batch_shape;
+                }
+            }
+        }
+
+        const weightSpecs = [];
+        const weightBuffers = [];
+
+        for (const group of modelJSON.weightsManifest) {
+            const correctedSpecs = group.weights.map(weight => ({
+                ...weight,
+                name: weight.name.replace(/^sequential_1\//, "")
+            }));
+            weightSpecs.push(...correctedSpecs);
+
+            for (const path of group.paths) {
+                const weightURL = new URL(path, modelURL).href;
+                const weightResponse = await fetch(weightURL);
+                if (!weightResponse.ok) throw new Error("Could not download weights.");
+                weightBuffers.push(await weightResponse.arrayBuffer());
+            }
+        }
+
+        const totalLength = weightBuffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+        const combinedWeights = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const buffer of weightBuffers) {
+            combinedWeights.set(new Uint8Array(buffer), offset);
+            offset += buffer.byteLength;
+        }
+
+        const handler = {
+            load: async () => ({
+                format: "layers-model",
+                generatedBy: modelJSON.generatedBy,
+                convertedBy: modelJSON.convertedBy,
+                modelTopology: modelJSON.modelTopology,
+                weightSpecs: weightSpecs,
+                weightData: combinedWeights.buffer
+            })
+        };
+
+        classifier = await tf.loadLayersModel(handler);
+
+        const labelsURL = "https://huggingface.co/AmimulBmeIU/asl-alphabet-classifier/resolve/main/labels.json";
+        const labelsResponse = await fetch(labelsURL);
+        if (!labelsResponse.ok) throw new Error("Could not download labels.");
+        labels = await labelsResponse.json();
+
+        updateModelStatus("Both models loaded successfully!");
+    }
+
+    // =====================================
+    // 6. CAMERA INITIALIZATION
+    // =====================================
+    async function startCamera() {
+        startButton.disabled = true;
+        try {
+            updateStatus("Opening camera...");
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "user" },
+                audio: false
+            });
+            video.srcObject = cameraStream;
+            await new Promise(resolve => { video.onloadedmetadata = resolve; });
+            await video.play();
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            running = true;
+            stopButton.disabled = false;
+            updateStatus("Camera working!");
+        } catch (error) {
+            console.error(error);
+            updateStatus("Camera error: " + error.message);
+            startButton.disabled = false;
+            return;
+        }
+
+        try {
+            await loadHandModel();
+            if (!running) return;
+            await loadClassifier();
+            if (!running) return;
+            updateStatus("Ready! Show an ASL letter.");
+        } catch (error) {
+            console.error("AI model error:", error);
+            updateModelStatus("Loading failed: " + error.message);
+            updateStatus("Camera works, but AI recognition failed.");
+        }
+
+        if (running) {
+            detectHands();
+        }
+    }
+
+    // =====================================
+    // 7. REAL-TIME HAND DETECTION & RECOGNITION LOOP
+    // =====================================
+    function detectHands() {
+        if (!running || !handLandmarker) return;
+
+        const results = handLandmarker.detectForVideo(video, performance.now());
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (results.landmarks && results.landmarks.length > 0) {
+            const landmarks = results.landmarks[0];
+            noHandFrames = 0;
+            drawHand(landmarks);
+
+            if (classifier) {
+                recognizeLetter(landmarks);
+            } else {
+                predictionStatus.textContent = "Hand detected. Waiting for classifier.";
+            }
+        } else {
+            currentLetter = "";
+            noHandFrames++;
+            if (noHandFrames >= NO_HAND_RESET_FRAMES) {
+                lastAddedLetter = "";
+            }
+            letterDisplay.textContent = "?";
+            topPredictionsDisplay.textContent = "Waiting for predictions...";
+            predictionStatus.textContent = "No hand detected.";
+            addButton.disabled = true;
+        }
+
+        if (running) {
+            animationFrame = requestAnimationFrame(detectHands);
+        }
+    }
+
+    // =====================================
+    // 8. CANVAS OVERLAY RENDERING
+    // =====================================
+    function drawHand(landmarks) {
+        ctx.strokeStyle = "#00FF00";
+        ctx.lineWidth = 3;
+
+        for (const connection of HandLandmarker.HAND_CONNECTIONS) {
+            const start = landmarks[connection.start];
+            const end = landmarks[connection.end];
+            ctx.beginPath();
+            ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
+            ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+            ctx.stroke();
+        }
+
+        for (const point of landmarks) {
+            ctx.beginPath();
+            ctx.arc(point.x * canvas.width, point.y * canvas.height, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = "#00FF00";
+            ctx.fill();
+        }
+    }
+
+    // =====================================
+    // 9. CLASSIFICATION LOGIC
+    // =====================================
+    function recognizeLetter(landmarks) {
+        try {
+            const features = [];
+            for (const point of landmarks) {
+                features.push(point.x, point.y, point.z);
+            }
+
+            const probabilities = tf.tidy(() => {
+                const input = tf.tensor2d([features], [1, 63]);
+                const output = classifier.predict(input);
+                return Array.from(output.dataSync());
+            });
+
+            const sortedPredictions = probabilities
+                .map((probability, index) => ({
+                    letter: labels[index],
+                    confidence: probability
+                }))
+                .sort((a, b) => b.confidence - a.confidence);
+
+            const bestPrediction = sortedPredictions[0];
+            currentLetter = bestPrediction.letter;
+            letterDisplay.textContent = currentLetter;
+
+            const topThree = sortedPredictions.slice(0, 3);
+            topPredictionsDisplay.innerHTML = topThree
+                .map((prediction, index) => `
+                    <div>
+                        ${index + 1}. <strong>${prediction.letter}</strong> — ${(prediction.confidence * 100).toFixed(1)}%
+                    </div>
+                `).join("");
+
+            if (currentLetter === lastAddedLetter) {
+                addButton.disabled = true;
+                predictionStatus.textContent = "Best guess: " + currentLetter + ". Already added.";
+            } else {
+                addButton.disabled = false;
+                predictionStatus.textContent = "Best guess: " + currentLetter;
+            }
+        } catch (error) {
+            console.error(error);
+            predictionStatus.textContent = "Recognition error: " + error.message;
+            addButton.disabled = true;
+        }
+    }
+
+    // =====================================
+    // 10. MESSAGE BUILDER CONTROLS
+    // =====================================
+    function updateMessage() {
+        sentenceDisplay.textContent = message;
+    }
+
+    function addLetter() {
+        if (currentLetter && currentLetter !== lastAddedLetter) {
+            message += currentLetter;
+            lastAddedLetter = currentLetter;
+            updateMessage();
+            addButton.disabled = true;
+            messageStatus.textContent = "Added " + lastAddedLetter + ".";
+        }
+    }
+
+    function addSpace() {
+        if (message.length > 0 && !message.endsWith(" ")) {
+            message += " ";
+            updateMessage();
+        }
+    }
+
+    function deleteLast() {
+        message = message.slice(0, -1);
+        updateMessage();
+    }
+
+    function clearMessage() {
+        message = "";
+        updateMessage();
+        messageStatus.textContent = "Message cleared.";
+    }
+
+    // =====================================
+    // 11. STOP CAMERA ROUTINE
+    // =====================================
+    function stopCamera() {
+        running = false;
+        if (animationFrame) {
+            cancelAnimationFrame(animationFrame);
+            animationFrame = null;
+        }
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        video.srcObject = null;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        currentLetter = "";
+        lastAddedLetter = "";
+        noHandFrames = 0;
+        letterDisplay.textContent = "?";
+        topPredictionsDisplay.textContent = "Camera stopped.";
+        predictionStatus.textContent = "Camera stopped.";
+        messageStatus.textContent = "Show a hand sign to begin.";
+        startButton.disabled = false;
+        stopButton.disabled = true;
+        addButton.disabled = true;
+        updateStatus("Camera stopped.");
+    }
+
+    // =====================================
+    // 12. EVENT LISTENERS
+    // =====================================
+    startButton.addEventListener("click", startCamera);
+    stopButton.addEventListener("click", stopCamera);
+    addButton.addEventListener("click", addLetter);
+    document.getElementById("spaceButton").addEventListener("click", addSpace);
+    document.getElementById("backspaceButton").addEventListener("click", deleteLast);
+    document.getElementById("clearButton").addEventListener("click", clearMessage);
+
+</script>
+
+</body>
+</html>
