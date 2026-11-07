@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Live Speech to Text</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f3f5f8;
+            padding: 40px;
+        }
+
+        .container {
+            background: white;
+            max-width: 700px;
+            margin: auto;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            color: #263445;
+        }
+
+        select, button {
+            padding: 10px;
+            margin: 8px;
+            font-size: 15px;
+            border-radius: 6px;
+        }
+
+        button {
+            border: none;
+            cursor: pointer;
+            background: #315fce;
+            color: white;
+        }
+
+        button:hover {
+            opacity: 0.85;
+        }
+
+        #stopButton {
+            background: #d9534f;
+        }
+
+        #saveButton {
+            background: #39845b;
+        }
+
+        #translateButton {
+            background: #7952b3;
+        }
+
+        #status, #translationStatus {
+            color: #555;
+            font-size: 14px;
+        }
+
+        .speech-box {
+            background: #f3f5f8;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 35px;
+            text-align: left;
+            margin-bottom: 20px;
+            overflow-wrap: anywhere;
+        }
+
+        textarea {
+            width: 95%;
+            height: 220px;
+            margin-top: 10px;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            resize: vertical;
+            box-sizing: border-box;
+            line-height: 1.6;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        hr {
+            margin: 30px 0;
+            border: none;
+            border-top: 1px solid #ddd;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Live Speech to Text</h1>
+
+    <p>
+        Speak into your microphone and watch your words
+        appear on the screen.
+    </p>
+
+    <!-- Speech recognition language -->
+
+    <label for="language">Speech language:</label>
+
+    <select id="language">
+        <option value="en-US">English</option>
+        <option value="fr-CA">French</option>
+        <option value="zh-CN">Chinese</option>
+    </select>
+
+    <br>
+
+    <!-- Control buttons -->
+
+    <button id="startButton" onclick="startListening()">
+        Start
+    </button>
+
+    <button id="stopButton" onclick="stopListening()">
+        Stop
+    </button>
+
+    <button id="saveButton" onclick="downloadText()">
+        Save Text
+    </button>
+
+    <!-- Recognition status -->
+
+    <p id="status">Status: Not listening</p>
+
+    <!-- Live speech preview -->
+
+    <h3>Currently Hearing:</h3>
+
+    <div class="speech-box">
+        <span id="liveText">Waiting for speech...</span>
+    </div>
+
+    <!-- Original transcription -->
+
+    <h3>Completed Transcription:</h3>
+
+    <textarea
+        id="output"
+        placeholder="Your completed transcription will appear here..."
+    ></textarea>
+
+    <hr>
+
+    <!-- Translation section -->
+
+    <h2>Translate Your Transcription</h2>
+
+    <p>Choose one language to translate your completed text into.</p>
+
+    <label for="targetLanguage">Translate into:</label>
+
+    <select id="targetLanguage">
+        <option value="en">English</option>
+        <option value="fr">French</option>
+        <option value="zh-CN">Chinese</option>
+        <option value="es">Spanish</option>
+        <option value="de">German</option>
+        <option value="it">Italian</option>
+        <option value="ja">Japanese</option>
+        <option value="ko">Korean</option>
+    </select>
+
+    <br>
+
+    <button id="translateButton" onclick="translateText()">
+        Translate
+    </button>
+
+    <p id="translationStatus">
+        Translation has not started.
+    </p>
+
+    <h3>Translated Text:</h3>
+
+    <textarea
+        id="translatedOutput"
+        placeholder="Your translated text will appear here..."
+        readonly
+    ></textarea>
+
+    <br>
+
+    <button onclick="downloadTranslation()">
+        Save Translation
+    </button>
+
+</div>
+
+<script>
+
+    // =========================================
+    // PART 1: SPEECH RECOGNITION
+    // =========================================
+
+    const SpeechRecognition =
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition;
+
+    const output = document.getElementById("output");
+    const status = document.getElementById("status");
+    const language = document.getElementById("language");
+    const liveText = document.getElementById("liveText");
+
+    let recognition;
+    let listening = false;
+
+    // Check browser support
+
+    if (!SpeechRecognition) {
+
+        status.textContent =
+            "Speech recognition is not supported by this browser.";
+
+    } else {
+
+        recognition = new SpeechRecognition();
+
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        // Process recognized speech
+
+        recognition.onresult = function(event) {
+
+            for (
+                let i = event.resultIndex;
+                i < event.results.length;
+                i++
+            ) {
+
+                const transcript =
+                    event.results[i][0].transcript;
+
+                if (event.results[i].isFinal) {
+
+                    // Add completed speech on a new line
+
+                    output.value += transcript.trim() + "\n";
+
+                    output.scrollTop = output.scrollHeight;
+
+                    liveText.textContent =
+                        "Waiting for speech...";
+
+                } else {
+
+                    // Show unfinished speech separately
+
+                    liveText.textContent = transcript;
+
+                }
+            }
+        };
+
+        // Handle errors
+
+        recognition.onerror = function(event) {
+
+            status.textContent = "Error: " + event.error;
+
+            if (event.error === "not-allowed") {
+                listening = false;
+            }
+        };
+
+        // Restart recognition if it ends unexpectedly
+
+        recognition.onend = function() {
+
+            if (listening) {
+
+                try {
+                    recognition.start();
+                } catch (error) {
+                    listening = false;
+                    status.textContent =
+                        "Could not restart recognition.";
+                }
+
+            } else {
+
+                status.textContent = "Status: Not listening";
+
+                liveText.textContent = "Waiting for speech...";
+
+            }
+        };
+    }
+
+
+    // Start microphone
+
+    function startListening() {
+
+        if (!recognition || listening) {
+            return;
+        }
+
+        recognition.lang = language.value;
+
+        listening = true;
+
+        status.textContent = "Status: Listening...";
+
+        liveText.textContent = "Listening for speech...";
+
+        try {
+            recognition.start();
+        } catch (error) {
+            listening = false;
+            status.textContent =
+                "Could not start: " + error.message;
+        }
+    }
+
+
+    // Stop microphone
+
+    function stopListening() {
+
+        if (!recognition || !listening) {
+            return;
+        }
+
+        listening = false;
+
+        recognition.stop();
+
+        status.textContent = "Status: Stopping...";
+    }
+
+
+    // =========================================
+    // PART 2: SAVE ORIGINAL TRANSCRIPTION
+    // =========================================
+
+    function downloadText() {
+
+        const file = new Blob(
+            [output.value],
+            { type: "text/plain;charset=utf-8" }
+        );
+
+        const link = document.createElement("a");
+
+        link.href = URL.createObjectURL(file);
+
+        link.download = "output.txt";
+
+        link.click();
+
+        URL.revokeObjectURL(link.href);
+    }
+
+
+    // =========================================
+    // PART 3: TRANSLATION
+    // =========================================
+
+    async function translateText() {
+
+        const originalText = output.value.trim();
+
+        const target = document.getElementById("targetLanguage").value;
+
+        const translationOutput =
+            document.getElementById("translatedOutput");
+
+        const translationStatus =
+            document.getElementById("translationStatus");
+
+        // Check whether there is text to translate
+
+        if (!originalText) {
+
+            translationStatus.textContent =
+                "Please record or enter some text first.";
+
+            return;
+        }
+
+        // Get the source language
+
+        let source = language.value;
+
+        if (source === "en-US") {
+            source = "en";
+        } else if (source === "fr-CA") {
+            source = "fr";
+        } else if (source === "zh-CN") {
+            source = "zh-CN";
+        }
+
+        // Prevent translating into the same language
+
+        if (source === target) {
+
+            translationStatus.textContent =
+                "Please choose a different target language.";
+
+            return;
+        }
+
+        translationOutput.value = "";
+
+        translationStatus.textContent =
+            "Translating... Please wait.";
+
+        document.getElementById("translateButton").disabled = true;
+
+        try {
+
+            // Split long text into smaller pieces
+            // MyMemory has a 500-byte request limit.
+
+            const chunks = splitText(originalText, 100);
+
+            let translatedParts = [];
+
+            // Translate each piece
+
+            for (let i = 0; i < chunks.length; i++) {
+
+                translationStatus.textContent =
+                    "Translating part " +
+                    (i + 1) + " of " + chunks.length + "...";
+
+                const translated = await translateChunk(
+                    chunks[i],
+                    source,
+                    target
+                );
+
+                translatedParts.push(translated);
+            }
+
+            // Combine all translated pieces
+
+            translationOutput.value =
+                translatedParts.join(" ");
+
+            translationStatus.textContent =
+                "Translation completed!";
+
+        } catch (error) {
+
+            translationStatus.textContent =
+                "Translation failed: " + error.message;
+
+        } finally {
+
+            document.getElementById("translateButton").disabled = false;
+
+        }
+    }
+
+
+    // Split text into smaller chunks
+
+    function splitText(text, maxLength) {
+
+        const characters = Array.from(text);
+
+        const chunks = [];
+
+        for (let i = 0; i < characters.length; i += maxLength) {
+
+            chunks.push(
+                characters.slice(i, i + maxLength).join("")
+            );
+
+        }
+
+        return chunks;
+    }
+
+
+    // Send one piece of text to the translation API
+
+    async function translateChunk(text, source, target) {
+
+        const parameters = new URLSearchParams({
+
+            q: text,
+
+            langpair: source + "|" + target
+
+        });
+
+        const url =
+            "https://api.mymemory.translated.net/get?" +
+            parameters.toString();
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error("Could not connect to translation service.");
+        }
+
+        const data = await response.json();
+
+        if (Number(data.responseStatus) !== 200) {
+
+            throw new Error(
+                data.responseDetails || "Translation service error."
+            );
+
+        }
+
+        return decodeHTML(data.responseData.translatedText);
+    }
+
+
+    // Convert HTML entities into normal text
+
+    function decodeHTML(text) {
+
+        const element = document.createElement("textarea");
+
+        element.innerHTML = text;
+
+        return element.value;
+    }
+
+
+    // =========================================
+    // PART 4: SAVE TRANSLATED TEXT
+    // =========================================
+
+    function downloadTranslation() {
+
+        const translatedText =
+            document.getElementById("translatedOutput").value;
+
+        if (!translatedText.trim()) {
+
+            document.getElementById("translationStatus").textContent =
+                "There is no translated text to save.";
+
+            return;
+        }
+
+        const file = new Blob(
+            [translatedText],
+            { type: "text/plain;charset=utf-8" }
+        );
+
+        const link = document.createElement("a");
+
+        link.href = URL.createObjectURL(file);
+
+        link.download = "translated_output.txt";
+
+        link.click();
+
+        URL.revokeObjectURL(link.href);
+    }
+
+</script>
+
+</body>
+</html>
