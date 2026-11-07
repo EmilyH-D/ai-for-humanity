@@ -1,0 +1,677 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text to ASL</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f3f5ff;
+    color: #25294a;
+}
+
+header {
+    text-align: center;
+    padding: 30px;
+}
+
+header h1 {
+    color: #343b78;
+}
+
+.container {
+    max-width: 950px;
+    margin: auto;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+.panel {
+    background: white;
+    padding: 25px;
+    border-radius: 18px;
+    box-shadow: 0 4px 15px rgba(0,0,0,.06);
+}
+
+h2 {
+    font-size: 20px;
+    margin-top: 0;
+}
+
+textarea {
+    width: 100%;
+    height: 130px;
+    padding: 15px;
+    border: 1px solid #d5d8ed;
+    border-radius: 10px;
+    font-size: 16px;
+    resize: vertical;
+}
+
+button {
+    border: none;
+    border-radius: 9px;
+    padding: 12px 16px;
+    margin: 10px 5px 0 0;
+    cursor: pointer;
+    background: #646ed0;
+    color: white;
+    font-size: 14px;
+}
+
+button:hover {
+    background: #4e58b5;
+}
+
+.secondary {
+    background: #e9eaff;
+    color: #414a9a;
+}
+
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.output {
+    margin-top: 15px;
+    padding: 12px;
+    background: #f5f5ff;
+    border-radius: 9px;
+    overflow-wrap: anywhere;
+}
+
+.status {
+    margin-top: 15px;
+    color: #626782;
+    font-size: 14px;
+    min-height: 25px;
+}
+
+.hand-panel {
+    text-align: center;
+}
+
+.hand-stage {
+    background: #f0f1ff;
+    border-radius: 15px;
+    min-height: 370px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#letterDisplay {
+    font-size: 25px;
+    font-weight: bold;
+    color: #343b78;
+    margin-bottom: 15px;
+}
+
+#handImage {
+    width: 100%;
+    max-width: 300px;
+    height: 270px;
+    object-fit: contain;
+    background: white;
+    border-radius: 12px;
+    padding: 12px;
+}
+
+#imageError {
+    display: none;
+    color: #a33;
+    font-size: 13px;
+    margin-top: 10px;
+}
+
+.progress {
+    margin-top: 15px;
+    padding: 12px;
+    background: #f5f5ff;
+    border-radius: 9px;
+}
+
+.progress-bar {
+    height: 8px;
+    background: #dfe2f7;
+    border-radius: 10px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+#progressFill {
+    height: 100%;
+    width: 0%;
+    background: #646ed0;
+}
+
+.note {
+    color: #777;
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 18px;
+}
+
+@media(max-width: 700px) {
+    .container {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>Text to ASL Fingerspelling</h1>
+    <p>Display each ASL letter individually.</p>
+</header>
+
+<main class="container">
+
+    <!-- INPUT PANEL -->
+
+    <section class="panel">
+
+        <h2>Enter Your Message</h2>
+
+        <textarea id="messageInput"
+            placeholder="Type your message here..."></textarea>
+
+        <button onclick="startSequence()">
+            Start
+        </button>
+
+        <button class="secondary" onclick="pronounceMessage()">
+            🔊 Pronounce
+        </button>
+
+        <div class="output">
+            <strong>Your message:</strong>
+            <p id="outputText">Your message will appear here.</p>
+        </div>
+
+        <p class="status" id="status">
+            Waiting for your message...
+        </p>
+
+    </section>
+
+
+    <!-- HAND DISPLAY PANEL -->
+
+    <section class="panel hand-panel">
+
+        <h2>ASL Hand Display</h2>
+
+        <div class="hand-stage">
+
+            <div id="letterDisplay">
+                Ready
+            </div>
+
+            <img
+                id="handImage"
+                src="https://stringmash.com/asl/A.svg"
+                alt="ASL handshape"
+            >
+
+            <p id="imageError">
+                Unable to load the hand image.
+                Check your internet connection.
+            </p>
+
+        </div>
+
+        <div class="progress">
+
+            <strong>Letter:</strong>
+            <span id="progressText">0 / 0</span>
+
+            <div class="progress-bar">
+                <div id="progressFill"></div>
+            </div>
+
+        </div>
+
+        <div>
+
+            <button class="secondary"
+                id="previousButton"
+                onclick="previousLetter()"
+                disabled>
+                ← Previous
+            </button>
+
+            <button
+                id="playButton"
+                onclick="playSequence()"
+                disabled>
+                ▶ Play
+            </button>
+
+            <button class="secondary"
+                id="pauseButton"
+                onclick="pauseSequence()"
+                disabled>
+                Ⅱ Pause
+            </button>
+
+            <button class="secondary"
+                id="nextButton"
+                onclick="nextLetter()"
+                disabled>
+                Next →
+            </button>
+
+        </div>
+
+        <p class="status" id="handStatus">
+            The ASL handshape will appear here.
+        </p>
+
+        <p class="note">
+            Each letter has its own handshape. J and Z involve
+            movement, so their still illustrations show the
+            starting handshape and movement path.
+        </p>
+
+    </section>
+
+</main>
+
+
+<script>
+
+// HTML ELEMENTS
+
+const messageInput =
+    document.getElementById("messageInput");
+
+const outputText =
+    document.getElementById("outputText");
+
+const handImage =
+    document.getElementById("handImage");
+
+const letterDisplay =
+    document.getElementById("letterDisplay");
+
+const status =
+    document.getElementById("status");
+
+const handStatus =
+    document.getElementById("handStatus");
+
+const progressText =
+    document.getElementById("progressText");
+
+const progressFill =
+    document.getElementById("progressFill");
+
+const imageError =
+    document.getElementById("imageError");
+
+const previousButton =
+    document.getElementById("previousButton");
+
+const nextButton =
+    document.getElementById("nextButton");
+
+const playButton =
+    document.getElementById("playButton");
+
+const pauseButton =
+    document.getElementById("pauseButton");
+
+
+// VARIABLES
+
+let letters = [];
+
+let currentIndex = 0;
+
+let timer = null;
+
+let playing = false;
+
+const LETTER_DELAY = 1200;
+
+
+// IMAGE SOURCE
+
+// Each letter has its own ASL hand illustration.
+// Example: A loads A.svg, B loads B.svg, etc.
+
+function getHandImage(letter) {
+
+    return `https://stringmash.com/asl/${letter}.svg`;
+
+}
+
+
+// DISPLAY ONE LETTER
+
+function displayLetter() {
+
+    if (letters.length === 0) return;
+
+    const letter = letters[currentIndex];
+
+    if (letter === " ") {
+
+        letterDisplay.textContent = "Word break";
+
+        handImage.style.visibility = "hidden";
+
+        handStatus.textContent = "Pause between words.";
+
+    } else {
+
+        letterDisplay.textContent = `Letter ${letter}`;
+
+        handImage.style.visibility = "visible";
+
+        imageError.style.display = "none";
+
+        handImage.src = getHandImage(letter);
+
+        handImage.alt = `ASL handshape for ${letter}`;
+
+        handStatus.textContent =
+            `Displaying the ASL handshape for ${letter}.`;
+
+    }
+
+    progressText.textContent =
+        `${currentIndex + 1} / ${letters.length}`;
+
+    progressFill.style.width =
+        `${((currentIndex + 1) / letters.length) * 100}%`;
+
+    updateButtons();
+
+}
+
+
+// IMAGE ERROR HANDLING
+
+handImage.onerror = function() {
+
+    imageError.style.display = "block";
+
+    handStatus.textContent =
+        "The hand illustration could not be loaded.";
+
+};
+
+handImage.onload = function() {
+
+    imageError.style.display = "none";
+
+};
+
+
+// BUTTON CONTROLS
+
+function updateButtons() {
+
+    const hasLetters = letters.length > 0;
+
+    previousButton.disabled =
+        !hasLetters || currentIndex === 0 || playing;
+
+    nextButton.disabled =
+        !hasLetters ||
+        currentIndex === letters.length - 1 ||
+        playing;
+
+    playButton.disabled =
+        !hasLetters || playing;
+
+    pauseButton.disabled =
+        !playing;
+
+}
+
+
+// START THE MESSAGE
+
+function startSequence() {
+
+    const message = messageInput.value.trim();
+
+    if (message === "") {
+
+        status.textContent =
+            "Please enter a message first.";
+
+        return;
+
+    }
+
+    stopSequence();
+
+    // Keep alphabet letters and spaces only.
+
+    letters = [...message.toUpperCase()]
+        .filter(character => /^[A-Z ]$/.test(character));
+
+    if (letters.length === 0) {
+
+        status.textContent =
+            "Please enter letters from A to Z.";
+
+        return;
+
+    }
+
+    outputText.textContent = message;
+
+    currentIndex = 0;
+
+    displayLetter();
+
+    status.textContent =
+        "Starting ASL fingerspelling...";
+
+    playSequence();
+
+}
+
+
+// AUTOMATIC PLAYBACK
+
+function playSequence() {
+
+    if (letters.length === 0) return;
+
+    if (currentIndex >= letters.length - 1) {
+
+        currentIndex = 0;
+
+    }
+
+    playing = true;
+
+    updateButtons();
+
+    displayLetter();
+
+    status.textContent =
+        "Displaying letters one at a time...";
+
+    timer = setTimeout(moveToNextLetter, LETTER_DELAY);
+
+}
+
+
+function moveToNextLetter() {
+
+    if (!playing) return;
+
+    if (currentIndex >= letters.length - 1) {
+
+        stopSequence();
+
+        status.textContent =
+            "Fingerspelling completed.";
+
+        handStatus.textContent =
+            "Your entire message has been displayed.";
+
+        return;
+
+    }
+
+    currentIndex++;
+
+    displayLetter();
+
+    const delay =
+        letters[currentIndex] === " "
+            ? 700
+            : LETTER_DELAY;
+
+    timer = setTimeout(moveToNextLetter, delay);
+
+}
+
+
+// PAUSE
+
+function pauseSequence() {
+
+    if (timer !== null) {
+
+        clearTimeout(timer);
+
+        timer = null;
+
+    }
+
+    playing = false;
+
+    updateButtons();
+
+    status.textContent =
+        "Fingerspelling paused.";
+
+}
+
+
+// STOP
+
+function stopSequence() {
+
+    if (timer !== null) {
+
+        clearTimeout(timer);
+
+        timer = null;
+
+    }
+
+    playing = false;
+
+    updateButtons();
+
+}
+
+
+// PREVIOUS LETTER
+
+function previousLetter() {
+
+    if (currentIndex > 0 && !playing) {
+
+        currentIndex--;
+
+        displayLetter();
+
+        status.textContent =
+            "Showing previous letter.";
+
+    }
+
+}
+
+
+// NEXT LETTER
+
+function nextLetter() {
+
+    if (
+        currentIndex < letters.length - 1 &&
+        !playing
+    ) {
+
+        currentIndex++;
+
+        displayLetter();
+
+        status.textContent =
+            "Showing next letter.";
+
+    }
+
+}
+
+
+// PRONOUNCE MESSAGE
+
+function pronounceMessage() {
+
+    const message = messageInput.value.trim();
+
+    if (message === "") {
+
+        status.textContent =
+            "Please enter a message first.";
+
+        return;
+
+    }
+
+    if (!("speechSynthesis" in window)) {
+
+        status.textContent =
+            "Audio is not supported by this browser.";
+
+        return;
+
+    }
+
+    window.speechSynthesis.cancel();
+
+    const speech =
+        new SpeechSynthesisUtterance(message);
+
+    speech.lang = "en-US";
+
+    speech.rate = 1;
+
+    window.speechSynthesis.speak(speech);
+
+    status.textContent =
+        "Pronouncing your message...";
+
+}
+
+</script>
+
+</body>
+</html>
