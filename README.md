@@ -1,13 +1,13 @@
-AI for Humanity: ASL Recognition & Visual Assistant
+#AI for Humanity: ASL Recognition & Visual Assistant
 
 An accessible, AI-powered web platform designed to bridge communication gaps for the Deaf and Hard of Hearing community while assisting visually impaired users. Built using MediaPipe, TensorFlow.js, and browser-native APIs, this platform runs directly in the browser via static web hosting without requiring complex backend servers.
 
-Live Demo
+#Live Demo
 
 Check out the deployed version of this project on GitHub Pages:
 https://emilyh-d.github.io/ai-for-humanity/
 
-Features
+#Features
 
 Real-Time ASL Recognition: Analyzes hand movements via live webcam feeds using MediaPipe HandLandmarker and classifies ASL alphabet signs using custom TensorFlow.js models.
 
@@ -19,7 +19,7 @@ Audio Speech Synthesis: Includes speech engine integration (window.speechSynthes
 
 100% Client-Side Execution: Runs securely and privately over HTTPS inside the user's web browser—no external Python servers or backend pipelines needed for web deployment.
 
-Built With
+#Built With
 
 HTML5 / CSS3 / JavaScript (ES6 Modules)
 
@@ -45,7 +45,7 @@ ai-for-humanity/
     └── yolo_trainer.py         # YOLO/OpenCV object detection experiment
 
 
-Getting Started Locally
+#Getting Started Locally
 
 Option A: Web Browser (Recommended)
 
@@ -77,7 +77,7 @@ python -m pip install --upgrade pip setuptools wheel
 python -m pip install opencv-python google-genai cryptography ultralytics
 
 
-Deploying to GitHub Pages
+#Deploying to GitHub Pages
 
 If you fork or clone this project, deploying your own version on GitHub Pages takes less than a minute:
 
@@ -91,10 +91,10 @@ Choose main (or master) as the branch and / (root) as the folder, then click Sav
 
 Your live site will automatically deploy over secure HTTPS!
 
-Contributing
+#Contributing
 
 Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
 
-License
+#License
 
 Distributed under the MIT License. See LICENSE for more details.
